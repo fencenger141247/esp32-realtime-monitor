@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>ESP32 Realtime DHT22 Monitor</title>
+
+  <style>
+    body { font-family: Arial; text-align: center; margin-top: 50px; }
+    .card {
+      border: 1px solid #ccc; padding: 20px; width: 300px;
+      margin: auto; border-radius: 10px; background: #f3f3f3;
+    }
+    h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+
+  <h2>🌡 ESP32 Realtime DHT22 Monitor</h2>
+
+  <div class="card">
+    <h3>Temperature: <span id="temp">--</span> °C</h3>
+    <h3>Humidity: <span id="humi">--</span> %</h3>
+  </div>
+
+  <!-- HiveMQ MQTT Websockets Library -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+  <script>
+    // **** Cloud Broker (HiveMQ Cloud) ****
+    const host = "wss://xxxxxxxxxxxx.s2.eu.hivemq.cloud:8884/mqtt";
+    const username = "YOUR_MQTT_USERNAME";
+    const password = "YOUR_MQTT_PASSWORD";
+
+    // เชื่อมต่อ MQTT
+    const client = mqtt.connect(host, {
+      username: username,
+      password: password,
+      reconnectPeriod: 1000
+    });
+
+    client.on("connect", () => {
+      console.log("Connected to MQTT");
+      client.subscribe("esp32/dht22");
+    });
+
+    // รับข้อมูลจาก ESP32
+    client.on("message", (topic, message) => {
+      const data = JSON.parse(message.toString());
+      document.getElementById("temp").innerText = data.temp;
+      document.getElementById("humi").innerText = data.humi;
+    });
+  </script>
+
+</body>
+</html>
