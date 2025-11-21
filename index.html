@@ -1,55 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="th">
 <head>
-  <meta charset="UTF-8">
-  <title>ESP32 Realtime DHT22 Monitor</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ESP32 DHT22 Dashboard</title>
 
-  <style>
-    body { font-family: Arial; text-align: center; margin-top: 50px; }
-    .card {
-      border: 1px solid #ccc; padding: 20px; width: 300px;
-      margin: auto; border-radius: 10px; background: #f3f3f3;
-    }
-    h2 { margin-top: 0; }
-  </style>
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<style>
+body { font-family: Arial, sans-serif; margin: 20px; background: #f4f7f8; color: #333;}
+h1 { text-align: center; margin-bottom: 20px;}
+.card { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);}
+.big { font-size: 3rem; font-weight: bold; }
+.status { width: 20px; height: 20px; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle;}
+.chart-row { display: flex; gap: 20px; } /* Flex container สำหรับวางกราฟข้างกัน */
+.chart-row .chart-container { flex: 1; }
+</style>
 </head>
 <body>
 
-  <h2>🌡 ESP32 Realtime DHT22 Monitor</h2>
+<h1>ESP32 DHT22 IoT Dashboard</h1>
 
-  <div class="card">
-    <h3>Temperature: <span id="temp">--</span> °C</h3>
-    <h3>Humidity: <span id="humi">--</span> %</h3>
-  </div>
+<div class="card">
+    <div>Device: <strong id="deviceId">esp32-dht01</strong></div>
+    <div>
+        Temperature: <span class="big" id="temp">--</span> °C
+        <span class="status" id="tempStatus" style="background:#ccc"></span>
+    </div>
+    <div>
+        Humidity: <span class="big" id="hum">--</span> %
+        <span class="status" id="humStatus" style="background:#ccc"></span>
+    </div>
+    <div>Last update: <span id="last">--</span></div>
+</div>
 
-  <!-- HiveMQ MQTT Websockets Library -->
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<!-- Container สำหรับกราฟ 2 กราฟข้างกัน -->
+<div class="card chart-row">
+    <div class="chart-container">
+        <canvas id="chartTemp"></canvas>
+    </div>
+    <div class="chart-container">
+        <canvas id="chartHum"></canvas>
+    </div>
+</div>
 
-  <script>
-    // **** Cloud Broker (HiveMQ Cloud) ****
-    const host = "wss://xxxxxxxxxxxx.s2.eu.hivemq.cloud:8884/mqtt";
-    const username = "YOUR_MQTT_USERNAME";
-    const password = "YOUR_MQTT_PASSWORD";
+<script>
+// Firebase config
+const firebaseConfig = {
+  apiKey: "AIzaSyDotA8ng3mV0SqqcU831k46IObMjUlBCYA",
+  authDomain: "esp32-dht-b536d.firebaseapp.com",
+  databaseURL: "https://esp32-dht-b536d-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "esp32-dht-b536d",
+  storageBucket: "esp32-dht-b536d.firebasestorage.app",
+  messagingSenderId: "529329575162",
+  appId: "1:529329575162:web:3a5e86d196689d4bf36543",
+  measurementId: "G-M9DH1QG8MR"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 
-    // เชื่อมต่อ MQTT
-    const client = mqtt.connect(host, {
-      username: username,
-      password: password,
-      reconnectPeriod: 1000
-    });
+const DEVICE_ID = "esp32-dht01"; // เปลี่ยนให้ตรงกับ ESP32 ของคุณ
 
-    client.on("connect", () => {
-      console.log("Connected to MQTT");
-      client.subscribe("esp32/dht22");
-    });
+// UI Elements
+const tempEl = document.getElementById('temp');
+const humEl = document.getElementById('hum');
+const lastEl = document.getElementById('last');
+const tempStatus = document.getElementById('tempStatus');
+const humStatus = document.getElementById('humStatus');
 
-    // รับข้อมูลจาก ESP32
-    client.on("message", (topic, message) => {
-      const data = JSON.parse(message.toString());
-      document.getElementById("temp").innerText = data.temp;
-      document.getElementById("humi").innerText = data.humi;
-    });
-  </script>
+// ฟังก์ชันแปลง timestamp
+function fmtTs(ts){
+    if(!ts) return '--';
+    const d = new Date(ts*1000);
+    return d.toLocaleTimeString();
+}
+
+// ฟังก์ชัน update status color
+function updateStatus(element, value, type){
+    if(type==='temp'){
+        if(value<30) element.style.background='green';
+        else if(value<35) element.style.background='yellow';
+        else element.style.background='red';
+    } else if(type==='hum'){
+        if(value<60) element.style.background='green';
+        else if(value<75) element.style.background='yellow';
+        else element.style.background='red';
+    }
+}
+
+// Chart.js setup - Temperature Line
+const ctxTemp = document.getElementById('chartTemp').getContext('2d');
+const chartTemp = new Chart(ctxTemp, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Temperature (°C)', data: [], borderColor: 'rgb(255,99,132)', backgroundColor: 'rgba(255,99,132,0.2)', tension: 0.3, fill: true }] },
+    options: { responsive: true, scales: { x: { title: { display: true, text: 'Time' } }, y: { title: { display: true, text: '°C' }, min: 0, max: 50 } } }
+});
+
+// Chart.js setup - Humidity Line
+const ctxHum = document.getElementById('chartHum').getContext('2d');
+const chartHum = new Chart(ctxHum, {
+    type: 'line',
+    data: { labels: [], datasets: [{ label: 'Humidity (%)', data: [], borderColor: 'rgb(54,162,235)', backgroundColor: 'rgba(54,162,235,0.2)', tension: 0.3, fill: true }] },
+    options: { responsive: true, scales: { x: { title: { display: true, text: 'Time' } }, y: { title: { display: true, text: '%'}, min:0, max:100 } } }
+});
+
+// Firebase listener
+const ref = db.ref('sensors/' + DEVICE_ID);
+ref.on('value', snapshot=>{
+    const val = snapshot.val();
+    if(!val) return;
+    const ts = val.ts || Math.floor(Date.now()/1000);
+    const t = val.temp;
+    const h = val.hum;
+
+    tempEl.innerText = t.toFixed(2);
+    humEl.innerText = h.toFixed(2);
+    lastEl.innerText = fmtTs(ts);
+    updateStatus(tempStatus, t, 'temp');
+    updateStatus(humStatus, h, 'hum');
+
+    // Update Temperature chart
+    chartTemp.data.labels.push(fmtTs(ts));
+    chartTemp.data.datasets[0].data.push(t);
+    if(chartTemp.data.labels.length>50){
+        chartTemp.data.labels.shift();
+        chartTemp.data.datasets[0].data.shift();
+    }
+    chartTemp.update();
+
+    // Update Humidity chart
+    chartHum.data.labels.push(fmtTs(ts));
+    chartHum.data.datasets[0].data.push(h);
+    if(chartHum.data.labels.length>50){
+        chartHum.data.labels.shift();
+        chartHum.data.datasets[0].data.shift();
+    }
+    chartHum.update();
+});
+</script>
 
 </body>
 </html>
