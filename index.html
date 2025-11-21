@@ -18,8 +18,7 @@ h1 { text-align: center; margin-bottom: 20px;}
 .card { background: white; border-radius: 10px; padding: 20px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.15);}
 .big { font-size: 3rem; font-weight: bold; }
 .status { width: 20px; height: 20px; border-radius: 50%; display: inline-block; margin-left: 10px; vertical-align: middle;}
-.chart-row { display: flex; gap: 20px; } /* Flex container สำหรับวางกราฟข้างกัน */
-.chart-row .chart-container { flex: 1; }
+.chart-container { width: 100%; } /* กราฟเต็มความกว้างของ card */
 </style>
 </head>
 <body>
@@ -39,12 +38,12 @@ h1 { text-align: center; margin-bottom: 20px;}
     <div>Last update: <span id="last">--</span></div>
 </div>
 
-<!-- Container สำหรับกราฟ 2 กราฟข้างกัน -->
-<div class="card chart-row">
+<!-- Container สำหรับกราฟ 2 กราฟ วางแบบคอลัมน์ -->
+<div class="card">
     <div class="chart-container">
         <canvas id="chartTemp"></canvas>
     </div>
-    <div class="chart-container">
+    <div class="chart-container" style="margin-top:30px;">
         <canvas id="chartHum"></canvas>
     </div>
 </div>
